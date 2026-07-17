@@ -48,13 +48,33 @@ Runtime: `/guard status` shows the mode; `/guard hybrid` (or `off`/`heuristic`/`
 
 ## Install
 
+### Marketplace (recommended)
+
 ```
-omp plugin link /path/to/omp-permission-guard
+omp plugin marketplace add hank-warren/omp-permission-guard
+omp plugin install omp-permission-guard@hank-warren
 ```
 
-Then start (or restart) `omp`. Verify with `omp plugin list` / `omp plugin doctor`.
+Upgrade later with `omp plugin upgrade omp-permission-guard@hank-warren`.
 
-The bundled `shell-quote` dependency must be present in the repo's `node_modules` (run `bun install` after cloning). The guardian's LLM call resolves `@oh-my-pi/pi-ai` from the global omp install at runtime; if it can't be found, `guardian`/`hybrid` degrade to fail-safe (prompt with UI, deny without) and `heuristic` mode is unaffected.
+### Direct git install
+
+```
+omp plugin install "git+https://github.com/hank-warren/omp-permission-guard.git"
+```
+
+Re-run the same command to upgrade (git installs are not covered by `omp plugin upgrade`).
+
+### Local link (development)
+
+```
+git clone https://github.com/hank-warren/omp-permission-guard.git
+cd omp-permission-guard && omp plugin link .
+```
+
+After any install, start (or restart) `omp`; verify with `omp plugin list` / `omp plugin doctor`.
+
+The plugin has **no external runtime dependencies** (`shell-quote` is vendored under `src/safety-net/vendor/`), so marketplace symlink installs work without `bun install`. The guardian's LLM call resolves `@oh-my-pi/pi-ai` from the global omp install at runtime; if it can't be found, `guardian`/`hybrid` fail safe (prompt with UI, deny without) and `heuristic` mode is unaffected.
 
 ### Recommended pairing
 
@@ -70,10 +90,11 @@ with the guard in `hybrid`. Core then stops prompting on tier, and the guard dec
 
 ## Disable
 
-`/guard off`, or `OMP_GUARD_MODE=off`, or set `"mode": "off"` in the config, or `omp plugin disable omp-permission-guard`.
+`/guard off`, or `OMP_GUARD_MODE=off`, or set `"mode": "off"` in the config, or `omp plugin disable omp-permission-guard@hank-warren` (marketplace install) / `omp plugin uninstall omp-permission-guard` (git/link install).
 
 ## Provenance & license
 
 - Extension logic ported from PR #1510 (`packages/coding-agent/src/tools/permission/*`, `edit/approval-path.ts`, `tools/bash-cwd.ts`, `tools/critical-bash-patterns.ts`, `prompts/system/guardian-system.md`).
 - `src/safety-net/` is vendored from [`cc-safety-net`](https://github.com/kenryu42/claude-code-safety-net) (MIT, v0.9.0) — see `src/safety-net/LICENSE`.
+- `src/safety-net/vendor/shell-quote.ts` is vendored from [`shell-quote`](https://github.com/ljharb/shell-quote) (MIT, v1.10.0) — see `src/safety-net/vendor/shell-quote.LICENSE`. Inlined so the plugin has zero external runtime deps (marketplace installs don't run `bun install`).
 - This package: MIT.
