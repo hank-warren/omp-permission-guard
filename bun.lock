@@ -4,9 +4,6 @@
   "workspaces": {
     "": {
       "name": "omp-permission-guard",
-      "dependencies": {
-        "shell-quote": "^1.10.0",
-      },
       "peerDependencies": {
         "@oh-my-pi/pi-ai": "*",
         "@oh-my-pi/pi-coding-agent": "*",
@@ -17,7 +14,5 @@
       ],
     },
   },
-  "packages": {
-    "shell-quote": ["shell-quote@1.10.0", "", {}, "sha512-w1aiOKwKuRgtwAReIIj89puqg+I7GvX4IbLrvmhXbzQsj1+Zwi4VO3+fa6ZF91TWSjIxoEkKnMeHcLEODK5ZXA=="],
-  }
+  "packages": {}
 }

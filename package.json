@@ -1,6 +1,6 @@
 {
 	"name": "omp-permission-guard",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"description": "Classifier-based tool-approval gate (heuristic / guardian / hybrid) for the oh-my-pi coding agent.",
 	"type": "module",
 	"license": "MIT",
@@ -23,8 +23,5 @@
 		"@oh-my-pi/pi-coding-agent": {
 			"optional": true
 		}
-	},
-	"dependencies": {
-		"shell-quote": "^1.10.0"
 	}
 }

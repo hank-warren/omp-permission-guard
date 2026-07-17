@@ -1,6 +1,6 @@
 import { realpathSync } from "node:fs";
 import { isAbsolute, parse as parsePath } from "node:path";
-import { type ParseEntry, parse } from "shell-quote";
+import { type ParseEntry, parse } from "../vendor/shell-quote";
 import { resolveChdirTarget } from "../core/path";
 import { MAX_STRIP_ITERATIONS, SHELL_OPERATORS } from "../types";
 import { GIT_CONFIG_AFFECTING_ENV_NAMES, GIT_CONTEXT_ENV_OVERRIDES } from "./worktree";

@@ -1,0 +1,20 @@
+{
+	"$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+	"name": "hank-warren",
+	"owner": {
+		"name": "Hank Warren"
+	},
+	"metadata": {
+		"description": "Hank's omp plugins",
+		"version": "1.0.0"
+	},
+	"plugins": [
+		{
+			"name": "omp-permission-guard",
+			"source": "./",
+			"description": "Classifier-based tool-approval gate (heuristic / guardian / hybrid) for the oh-my-pi coding agent.",
+			"category": "security",
+			"homepage": "https://github.com/hank-warren/omp-permission-guard"
+		}
+	]
+}
