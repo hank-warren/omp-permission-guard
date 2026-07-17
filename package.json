@@ -1,0 +1,30 @@
+{
+	"name": "omp-permission-guard",
+	"version": "0.1.0",
+	"description": "Classifier-based tool-approval gate (heuristic / guardian / hybrid) for the oh-my-pi coding agent.",
+	"type": "module",
+	"license": "MIT",
+	"omp": {
+		"extensions": [
+			"./src/index.ts"
+		]
+	},
+	"scripts": {
+		"test": "bun test"
+	},
+	"peerDependencies": {
+		"@oh-my-pi/pi-ai": "*",
+		"@oh-my-pi/pi-coding-agent": "*"
+	},
+	"peerDependenciesMeta": {
+		"@oh-my-pi/pi-ai": {
+			"optional": true
+		},
+		"@oh-my-pi/pi-coding-agent": {
+			"optional": true
+		}
+	},
+	"dependencies": {
+		"shell-quote": "^1.10.0"
+	}
+}
