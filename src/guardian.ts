@@ -21,6 +21,9 @@ const VERDICT_TOOL_NAME = "verdict";
 // security-relevant argument. Bound the prompt generously and elide only the MIDDLE on overflow
 // (head + tail) — head-only truncation could drop a trailing `; rm -rf /`.
 const MAX_ARGS_CHARS = 8000;
+// The user's recent instruction is the authorization signal for explicitly-requested dangerous
+// actions; bound it so a long turn can't dominate the judge prompt (head-truncate: the ask is usually up front).
+const MAX_INTENT_CHARS = 2000;
 const GUARDIAN_MAX_TOKENS = 200;
 const REASONING_SAFE_MAX_TOKENS = 1024;
 const DEFAULT_MAX_ATTEMPTS = 3;
@@ -59,6 +62,10 @@ export interface GuardianRequest {
 	/** Reason a prior heuristic flagged the call (hybrid mode). */
 	reason?: string;
 	cwd?: string;
+	/** The user's recent instruction(s), so the judge can honor explicitly-requested actions. */
+	intent?: string;
+	/** True when a heuristic already BLOCKED this as dangerous (escalated deny): allow ONLY on explicit user authorization. */
+	blocked?: boolean;
 }
 
 /** Live dependencies injected from the extension handler context. */
@@ -131,8 +138,20 @@ function truncateArgsForJudgment(value: string, maxChars: number): string {
 function buildUserMessage(req: GuardianRequest): string {
 	const lines = [`Tool: ${req.toolName}`];
 	if (req.cwd) lines.push(`Working directory: ${req.cwd}`);
-	if (req.reason) lines.push(`A safety heuristic flagged this call: ${req.reason}`);
+	if (req.reason) {
+		lines.push(
+			req.blocked
+				? `A safety heuristic BLOCKED this call as dangerous: ${req.reason}`
+				: `A safety heuristic could not prove this call safe: ${req.reason}`,
+		);
+	}
 	lines.push("Arguments:", truncateArgsForJudgment(safeStringify(req.args), MAX_ARGS_CHARS));
+	const intent = req.intent?.trim();
+	lines.push(
+		"",
+		"The user's most recent instruction(s) to the agent:",
+		intent ? truncateArgsForJudgment(intent, MAX_INTENT_CHARS) : "(no explicit user instruction available)",
+	);
 	return lines.join("\n");
 }
 

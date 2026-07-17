@@ -11,9 +11,9 @@ This is a standalone port of the (rejected) core PR [can1357/oh-my-pi#1510](http
 | Mode | Behavior |
 |---|---|
 | `off` | Disabled — pass-through (default). |
-| `heuristic` | Prove-or-block. Bash → vendored command analyzer + workspace/path containment; `eval` → dangerous-code detection; `write`/`edit`/`ast_edit`/`lsp`/`tts` → risky-path rules. `allow` on positive proof, `deny` on proven danger/escape, and `deny` on anything that can't be proven safe (no judge to escalate to). |
+| `heuristic` | Prove-or-block. Bash → vendored command analyzer + workspace/path containment; `eval` → dangerous-code detection; `write`/`edit`/`ast_edit`/`lsp`/`tts` → risky-path rules. `allow` on positive proof; anything not proven safe (proven danger/escape or unprovable) is blocked — a confirm dialog when a UI exists (`promptOnBlock`), else a hard `deny`. No judge. |
 | `guardian` | An ephemeral one-shot LLM judge reviews **exec-tier** calls (bash, eval, ssh, browser, task, …); read/write auto-allow. |
-| `hybrid` | Heuristic first; a proven `deny` is terminal, only `uncertain` calls escalate to the guardian. **Recommended.** |
+| `hybrid` | Heuristic first. Proven-safe → allow. `uncertain` escalates to the guardian; a proven `deny` also escalates (`escalateBlocked`) so the judge can allow an action the **user explicitly requested** — upgrade-only, a judge deny/error/absence keeps the block. A call that stays blocked is a confirm dialog (`promptOnBlock` + UI) or a hard `deny`. **Recommended.** |
 
 A tool call resolves to one of three actions:
 - **allow** → the call runs.
@@ -21,6 +21,14 @@ A tool call resolves to one of three actions:
 - **prompt** → in an interactive session you get a confirm dialog; with **no UI** (print mode, subagents) it fails safe (blocks).
 
 `read`-tier tools are never gated.
+
+## Intent awareness & overrides
+
+An **explicit user request wins**, without opening a prompt-injection hole:
+
+- The guardian is given your most recent instruction(s), read from the session transcript — **user-role turns only**, so text the agent merely *read* from a file or command output can never masquerade as authorization. It allows an otherwise-dangerous call **only** when your instruction explicitly and specifically directed that exact action.
+- In `hybrid`, a heuristic-blocked call escalates to the guardian (`escalateBlocked`, default on). **Upgrade-only**: the judge can turn a block into an allow, but a judge deny / error / absence leaves the block in place — the safety net never weakens when no judge can weigh in.
+- A blocked call is not a dead end interactively: with a UI it becomes a **confirm dialog** (`promptOnBlock`, default on) so you can override; in headless runs (print mode, subagents) it stays a hard block.
 
 ## Mode precedence
 
@@ -35,6 +43,8 @@ A tool call resolves to one of three actions:
   "mode": "hybrid",
   "guardianModel": "",
   "maxAttempts": 3,
+  "escalateBlocked": true,
+  "promptOnBlock": true,
   "approval": { "bash": "prompt" }
 }
 ```
@@ -42,6 +52,8 @@ A tool call resolves to one of three actions:
 - `mode` — `off` | `heuristic` | `guardian` | `hybrid`.
 - `guardianModel` — model spec (`provider/id`) or role alias for the judge. Empty → the fast role chain (`@smol` → `@commit`) → the session model.
 - `maxAttempts` — guardian retry budget (default 3).
+- `escalateBlocked` — hybrid only: escalate a heuristic-blocked exec call to the guardian so it can allow an explicitly user-requested action (upgrade-only). Default `true`; set `false` for strict prove-or-block.
+- `promptOnBlock` — when a UI exists, surface a confirm dialog instead of a hard block so you can override; headless runs still hard-deny. Default `true`; set `false` for a hard wall even interactively.
 - `approval` — per-tool overrides, authoritative in **every** mode: `allow` bypasses the classifier, `deny` always blocks, `prompt` always asks.
 
 Runtime: `/guard status` shows the mode; `/guard hybrid` (or `off`/`heuristic`/`guardian`) switches it for the current session.

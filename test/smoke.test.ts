@@ -143,3 +143,126 @@ describe("evaluatePermission (no guardian)", () => {
 		expect(a.action).toBe("allow");
 	});
 });
+
+describe("evaluatePermission (intent-aware escalation)", () => {
+	const base = { userPolicies: {}, workspaceRoot: WS, hasUI: true } as const;
+	const CRIT = { toolName: "bash", args: { command: "sudo rm /var/log/x" }, tier: "exec" } as const;
+	const allowGuardian = { evaluate: async () => ({ decision: "allow" as const }) };
+	const denyGuardian = { evaluate: async () => ({ decision: "deny" as const, reason: "not requested" }) };
+
+	test("hybrid: blocked + escalate + guardian allows -> allow", async () => {
+		const a = await evaluatePermission({
+			...CRIT,
+			mode: "hybrid",
+			guardian: allowGuardian,
+			intent: "please run sudo rm /var/log/x",
+			escalateBlocked: true,
+			...base,
+		});
+		expect(a.action).toBe("allow");
+	});
+	test("hybrid: blocked + escalate + guardian denies -> deny (block stands)", async () => {
+		const a = await evaluatePermission({ ...CRIT, mode: "hybrid", guardian: denyGuardian, escalateBlocked: true, ...base });
+		expect(a.action).toBe("deny");
+	});
+	test("hybrid: blocked + escalate + no guardian -> deny (block stands)", async () => {
+		const a = await evaluatePermission({ ...CRIT, mode: "hybrid", escalateBlocked: true, ...base });
+		expect(a.action).toBe("deny");
+	});
+	test("hybrid: blocked + escalateBlocked=false -> deny, guardian not consulted", async () => {
+		let called = false;
+		const spy = {
+			evaluate: async () => {
+				called = true;
+				return { decision: "allow" as const };
+			},
+		};
+		const a = await evaluatePermission({ ...CRIT, mode: "hybrid", guardian: spy, escalateBlocked: false, ...base });
+		expect(a.action).toBe("deny");
+		expect(called).toBe(false);
+	});
+	test("escalated block forwards blocked=true + intent to the guardian", async () => {
+		let seenBlocked: boolean | undefined;
+		let seenIntent: string | undefined;
+		const capture = {
+			evaluate: async (req: { intent?: string; blocked?: boolean }) => {
+				seenBlocked = req.blocked;
+				seenIntent = req.intent;
+				return { decision: "deny" as const, reason: "x" };
+			},
+		};
+		await evaluatePermission({ ...CRIT, mode: "hybrid", guardian: capture, intent: "wipe it", escalateBlocked: true, ...base });
+		expect(seenBlocked).toBe(true);
+		expect(seenIntent).toBe("wipe it");
+	});
+	test("guardian mode forwards intent and allows on guardian allow", async () => {
+		let seenIntent: string | undefined = "UNSET";
+		const capture = {
+			evaluate: async (req: { intent?: string }) => {
+				seenIntent = req.intent;
+				return { decision: "allow" as const };
+			},
+		};
+		const a = await evaluatePermission({
+			toolName: "ssh",
+			args: { cmd: "x" },
+			tier: "exec",
+			mode: "guardian",
+			guardian: capture,
+			intent: "ssh in",
+			...base,
+		});
+		expect(a.action).toBe("allow");
+		expect(seenIntent).toBe("ssh in");
+	});
+});
+
+describe("evaluatePermission (promptOnBlock human override)", () => {
+	const base = { userPolicies: {}, workspaceRoot: WS, hasUI: true } as const;
+	const CRIT = { toolName: "bash", args: { command: "rm -rf /" }, tier: "exec" } as const;
+	const denyGuardian = { evaluate: async () => ({ decision: "deny" as const, reason: "no" }) };
+
+	test("proven deny + promptOnBlock + UI -> prompt", async () => {
+		const a = await evaluatePermission({ ...CRIT, mode: "heuristic", promptOnBlock: true, ...base });
+		expect(a.action).toBe("prompt");
+	});
+	test("proven deny + promptOnBlock + no UI -> deny (headless wall stands)", async () => {
+		const a = await evaluatePermission({
+			...CRIT,
+			mode: "heuristic",
+			promptOnBlock: true,
+			userPolicies: {},
+			workspaceRoot: WS,
+			hasUI: false,
+		});
+		expect(a.action).toBe("deny");
+	});
+	test("proven deny WITHOUT promptOnBlock + UI -> deny (strict wall)", async () => {
+		const a = await evaluatePermission({ ...CRIT, mode: "heuristic", promptOnBlock: false, ...base });
+		expect(a.action).toBe("deny");
+	});
+	test("hybrid: guardian denies the escalation + promptOnBlock -> prompt (override offered)", async () => {
+		const a = await evaluatePermission({
+			...CRIT,
+			mode: "hybrid",
+			guardian: denyGuardian,
+			escalateBlocked: true,
+			promptOnBlock: true,
+			...base,
+		});
+		expect(a.action).toBe("prompt");
+	});
+	test("user-policy deny stays a hard deny even with promptOnBlock", async () => {
+		const a = await evaluatePermission({
+			toolName: "bash",
+			args: { command: "ls" },
+			tier: "exec",
+			mode: "hybrid",
+			userPolicies: { bash: "deny" },
+			workspaceRoot: WS,
+			hasUI: true,
+			promptOnBlock: true,
+		});
+		expect(a.action).toBe("deny");
+	});
+});

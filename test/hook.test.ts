@@ -40,6 +40,12 @@ const ctx = {
 	ui: { confirm: async () => false, notify: (m: string) => notes.push(m) },
 	models: { resolve: () => undefined, current: () => undefined, list: () => [] },
 	modelRegistry: { getApiKey: async () => undefined },
+	sessionManager: {
+		getEntries: () => [
+			{ type: "message", message: { role: "user", content: "delete the temp files" } },
+			{ type: "message", message: { role: "assistant", content: [{ type: "text", text: "ok" }] } },
+		],
+	},
 };
 
 afterEach(() => {
@@ -86,5 +92,29 @@ describe("tool_call hook wiring", () => {
 		notes.length = 0;
 		await commands.guard!.handler("status", ctx);
 		expect(notes.some(n => n.includes("mode"))).toBe(true);
+	});
+
+	test("reads recent user intent from the session transcript", async () => {
+		process.env.OMP_GUARD_MODE = "heuristic";
+		let called = false;
+		const spyCtx = { ...ctx, sessionManager: { getEntries: () => { called = true; return []; } } };
+		const { handler } = harness();
+		await handler({ toolName: "bash", input: { command: "ls" } }, spyCtx);
+		expect(called).toBe(true);
+	});
+
+	test("proven deny + interactive confirm=true -> allowed (human override)", async () => {
+		process.env.OMP_GUARD_MODE = "heuristic";
+		const okCtx = { ...ctx, ui: { confirm: async () => true, notify: (m: string) => notes.push(m) } };
+		const { handler } = harness();
+		expect(await handler({ toolName: "bash", input: { command: "rm -rf /" } }, okCtx)).toBeUndefined();
+	});
+
+	test("proven deny + headless (no UI) -> hard block despite promptOnBlock default", async () => {
+		process.env.OMP_GUARD_MODE = "heuristic";
+		const headless = { ...ctx, hasUI: false };
+		const { handler } = harness();
+		const res = await handler({ toolName: "bash", input: { command: "rm -rf /" } }, headless);
+		expect(res?.block).toBe(true);
 	});
 });

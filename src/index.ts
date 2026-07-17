@@ -34,6 +34,10 @@ interface GuardConfig {
 	maxAttempts?: number;
 	/** Per-tool overrides, authoritative in every mode: `allow` | `deny` | `prompt`. */
 	approval?: Record<string, string>;
+	/** Hybrid only: escalate a heuristic-blocked exec call to the Guardian (upgrade-only). Default true. */
+	escalateBlocked?: boolean;
+	/** Surface a confirm dialog instead of a hard block when a UI exists (headless still hard-denies). Default true. */
+	promptOnBlock?: boolean;
 }
 
 function isMode(value: unknown): value is Mode {
@@ -66,6 +70,58 @@ function previewArgs(toolName: string, args: unknown): string {
 		text = String(args);
 	}
 	return text.length > 300 ? `${text.slice(0, 300)}…` : text;
+}
+
+const MAX_INTENT_TURNS = 3;
+const MAX_INTENT_CHARS = 4000;
+
+/** Text of a session message's content, whether a bare string or a block array. */
+function messageText(content: unknown): string {
+	if (typeof content === "string") return content;
+	if (!Array.isArray(content)) return "";
+	const parts: string[] = [];
+	for (const block of content) {
+		if (!block || typeof block !== "object") continue;
+		if (!("type" in block) || block.type !== "text") continue;
+		if ("text" in block && typeof block.text === "string") parts.push(block.text);
+	}
+	return parts.join("\n");
+}
+
+interface TranscriptCtx {
+	sessionManager?: { getEntries?: () => readonly unknown[] };
+}
+
+/**
+ * The user's most recent instruction(s), read from the (read-only) session
+ * transcript, so the Guardian can honor explicitly-requested dangerous actions.
+ * Returns up to the last few genuine user turns (oldest first), bounded — the
+ * `tool_call` event itself carries no conversation.
+ */
+function recentUserIntent(ctx: TranscriptCtx): string | undefined {
+	const getEntries = ctx.sessionManager?.getEntries;
+	if (typeof getEntries !== "function") return undefined;
+	let entries: readonly unknown[];
+	try {
+		entries = getEntries.call(ctx.sessionManager);
+	} catch {
+		return undefined;
+	}
+	const turns: string[] = [];
+	for (let i = entries.length - 1; i >= 0 && turns.length < MAX_INTENT_TURNS; i--) {
+		const entry = entries[i];
+		if (!entry || typeof entry !== "object") continue;
+		if (!("type" in entry) || entry.type !== "message") continue;
+		if (!("message" in entry) || !entry.message || typeof entry.message !== "object") continue;
+		const message = entry.message;
+		if (!("role" in message) || message.role !== "user") continue;
+		const content = "content" in message ? message.content : undefined;
+		const text = messageText(content).trim();
+		if (text) turns.push(text);
+	}
+	if (turns.length === 0) return undefined;
+	const joined = turns.reverse().join("\n\n");
+	return joined.length > MAX_INTENT_CHARS ? joined.slice(joined.length - MAX_INTENT_CHARS) : joined;
 }
 
 export default function permissionGuard(pi: ExtensionAPI): void {
@@ -145,6 +201,9 @@ export default function permissionGuard(pi: ExtensionAPI): void {
 			workspaceRoot: ctx.cwd,
 			hasUI: ctx.hasUI,
 			guardian,
+			intent: recentUserIntent(ctx),
+			escalateBlocked: cfg.escalateBlocked !== false,
+			promptOnBlock: cfg.promptOnBlock !== false,
 		});
 
 		if (action.action === "allow") return;
